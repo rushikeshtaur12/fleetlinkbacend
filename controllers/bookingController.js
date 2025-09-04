@@ -16,7 +16,7 @@ export const createBooking = async (req, res) => {
 
     const end = new Date(start.getTime() + duration * 60 * 60 * 1000); // ✅ calculate endTime
 
-    // check for conflicts
+    // check for conflict
     const conflict = await Booking.findOne({
       vehicleId,
       $or: [
