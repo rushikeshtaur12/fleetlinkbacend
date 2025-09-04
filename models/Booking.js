@@ -7,6 +7,7 @@ const bookingSchema = new mongoose.Schema({
   startTime: { type: Date, required: true },
   endTime: { type: Date, required: true }, // ✅ required
   customerId: { type: String, required: true },
+  isCancelled: { type: Boolean, default: false }
 });
 
 export default mongoose.model("Booking", bookingSchema);
