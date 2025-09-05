@@ -7,7 +7,7 @@ import Vehicle from "../models/Vehicle.js";
 const calcDurationHours = (fromPincode, toPincode) => {
   const a = parseInt(fromPincode || "0", 10);
   const b = parseInt(toPincode || "0", 10);
-  return Math.abs(a - b) % 24;
+  return Math.abs(a - b) % 24 || 1; // ensure at least 1 hour
 };
 
 const generateCustomerId = () => `CUST-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
@@ -15,16 +15,26 @@ const generateCustomerId = () => `CUST-${Date.now()}-${Math.floor(Math.random() 
 export const createBooking = async (req, res) => {
   try {
     const { vehicleId, fromPincode, toPincode, startTime } = req.body;
+
     // basic validation
     if (!vehicleId || !fromPincode || !toPincode || !startTime) {
-      return res.status(400).json({ message: "vehicleId, fromPincode, toPincode and startTime are required" });
+      return res
+        .status(400)
+        .json({ message: "vehicleId, fromPincode, toPincode and startTime are required" });
     }
 
     const vehicle = await Vehicle.findById(vehicleId);
     if (!vehicle) return res.status(404).json({ message: "Vehicle not found" });
 
     const start = new Date(startTime);
-    if (Number.isNaN(start.getTime())) return res.status(400).json({ message: "Invalid startTime" });
+    if (Number.isNaN(start.getTime()))
+      return res.status(400).json({ message: "Invalid startTime" });
+
+    // 🚨 Disallow booking in the past
+    const now = new Date();
+    if (start < now) {
+      return res.status(400).json({ message: "Start time cannot be in the past" });
+    }
 
     const duration = calcDurationHours(fromPincode, toPincode);
     const end = new Date(start.getTime() + duration * 60 * 60 * 1000);
@@ -33,13 +43,13 @@ export const createBooking = async (req, res) => {
     const conflict = await Booking.findOne({
       vehicleId,
       isCancelled: false,
-      $or: [
-        { startTime: { $lt: end }, endTime: { $gt: start } }
-      ]
+      $or: [{ startTime: { $lt: end }, endTime: { $gt: start } }],
     });
 
     if (conflict) {
-      return res.status(409).json({ message: "Vehicle already booked for overlapping time slot" });
+      return res
+        .status(409)
+        .json({ message: "Vehicle already booked for overlapping time slot" });
     }
 
     // Generate customerId on backend
@@ -52,7 +62,7 @@ export const createBooking = async (req, res) => {
       startTime: start,
       endTime: end,
       customerId,
-      isCancelled: false
+      isCancelled: false,
     });
 
     res.status(201).json(booking);

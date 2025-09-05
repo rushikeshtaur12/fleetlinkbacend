@@ -74,7 +74,7 @@ export const getAvailableVehicles = async (req, res) => {
       }
     }
 
-    // 🚩 Handle no available vehicles
+    //  Handle no available vehicles
     if (available.length === 0) {
       return res.status(200).json({
         message: "No vehicles available for the given criteria.",
