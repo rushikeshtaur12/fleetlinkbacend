@@ -1,56 +1,90 @@
 import Vehicle from "../models/Vehicle.js";
 import Booking from "../models/Booking.js";
 
-// Add new vehicle
+/**
+ * Calculate estimated ride duration hours using simplified formula:
+ * Math.abs(parseInt(toPincode) - parseInt(fromPincode)) % 24
+ */
+const calcDurationHours = (fromPincode, toPincode) => {
+  const a = parseInt(fromPincode || "0", 10);
+  const b = parseInt(toPincode || "0", 10);
+  return Math.abs(a - b) % 24;
+};
+// add vehicle
 export const addVehicle = async (req, res) => {
   try {
     const { name, capacityKg, tyres } = req.body;
-    if (!name || !capacityKg || !tyres) {
-      return res.status(400).json({ message: "All fields required" });
+    if (!name || capacityKg == null || tyres == null) {
+      return res.status(400).json({ message: "name, capacityKg and tyres are required" });
     }
-    const vehicle = await Vehicle.create({ name, capacityKg, tyres, booked: false , createdAt: new Date(),});
+    const vehicle = await Vehicle.create({ name, capacityKg, tyres });
     res.status(201).json(vehicle);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 };
 
-// Get available vehicles
+/**
+ * GET /api/vehicles/available
+ * Query params:
+ *  - capacityRequired
+ *  - fromPincode
+ *  - toPincode
+ *  - startTime (ISO)
+ * 
+ */
+// availbe vehicle
 export const getAvailableVehicles = async (req, res) => {
   try {
     const { capacityRequired, fromPincode, toPincode, startTime } = req.query;
     if (!capacityRequired || !fromPincode || !toPincode || !startTime) {
-      return res.status(400).json({ message: "Missing query params" });
+      return res
+        .status(400)
+        .json({ message: "capacityRequired, fromPincode, toPincode and startTime are required" });
     }
 
-    const requestedStart = new Date(startTime);
+    const start = new Date(startTime);
+    if (Number.isNaN(start.getTime())) {
+      return res.status(400).json({ message: "Invalid startTime" });
+    }
 
-    // Ride duration
-    let duration = Math.abs(parseInt(toPincode) - parseInt(fromPincode)) % 24;
-    if (duration === 0) duration = 1;
-    const requestedEnd = new Date(requestedStart.getTime() + duration * 60 * 60 * 1000);
+    const duration = calcDurationHours(fromPincode, toPincode);
+    const end = new Date(start.getTime() + duration * 60 * 60 * 1000);
 
-    // Vehicles with enough capacity
-    const vehicles = await Vehicle.find({ capacityKg: { $gte: capacityRequired }, booked: false });
+    // Find vehicles satisfying capacity
+    const vehicles = await Vehicle.find({
+      capacityKg: { $gte: Number(capacityRequired) },
+    });
 
-    const availableVehicles = [];
-
-    for (const vehicle of vehicles) {
-      // Check overlapping bookings
-      const overlapping = await Booking.findOne({
-        vehicleId: vehicle._id,
-        $or: [
-          { startTime: { $lt: requestedEnd }, endTime: { $gt: requestedStart } },
-        ],
+    const available = [];
+    for (const v of vehicles) {
+      const conflict = await Booking.findOne({
+        vehicleId: v._id,
+        isCancelled: false,
+        // overlap test: existing.start < requestedEnd && existing.end > requestedStart
+        startTime: { $lt: end },
+        endTime: { $gt: start },
       });
 
-      if (!overlapping) {
-        availableVehicles.push({ ...vehicle.toObject(), estimatedRideDurationHours: duration, booked: false });
+      if (!conflict) {
+        available.push({
+          ...v.toObject(),
+          estimatedRideDurationHours: duration,
+        });
       }
     }
 
-    res.status(200).json(availableVehicles);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+    // 🚩 Handle no available vehicles
+    if (available.length === 0) {
+      return res.status(200).json({
+        message: "No vehicles available for the given criteria.",
+        vehicles: [],
+      });
+    }
+
+    res.status(200).json(available);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 };
+

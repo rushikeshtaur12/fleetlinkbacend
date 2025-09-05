@@ -3,7 +3,7 @@ import { getAllBookings, cancelBooking } from "../controllers/manageBookingContr
 
 const router = express.Router();
 
-router.get("/", getAllBookings);          // GET /api/manage-bookings
-router.patch("/:id/cancel", cancelBooking);    // DELETE /api/manage-bookings/:id
+router.get("/", getAllBookings);
+router.patch("/:id/cancel", cancelBooking);
 
 export default router;
